@@ -1,6 +1,5 @@
 section .text
 
-global exit
 global string_length
 global print_string
 global print_char
@@ -14,10 +13,6 @@ global read_word
 global string_copy
 global print_error
 
-exit: 
-    xor rdi, rdi
-    mov rax, 60
-    syscall
 
 string_length:
 	xor rax, rax

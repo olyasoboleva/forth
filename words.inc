@@ -1,5 +1,3 @@
-%include "colon.inc"
-
 ;(a b -- [a + b])
 native "+", plus
 	pop rax
@@ -131,7 +129,7 @@ native "land", land
 	push 0
 	jmp next
 
-;(wtf)
+;(a b -- [a || b])
 native "lor", lor
 	pop rdx
 	pop rax
@@ -144,9 +142,18 @@ native "lor", lor
 	jmp next
   
 native ".", dot
-    pop rdi
-    call print_int
-    jmp next
+	cmp     rsp, [stackHead]
+	je      .error
+	pop     rdi
+	call    print_int
+	call    print_newline
+	jmp     .f
+	.error:
+	mov     rdi, underflow
+	call    print_string
+	call    print_newline
+	.f:
+	jmp     next
   
 native ">r", to_r
     pop rax
@@ -192,23 +199,25 @@ native "c!", write_byte
 	mov [rax], dl    
 	jmp next
 
-;( xt -- )
 native "execute", exec
 	pop rax
 	mov w, rax	
 	jmp [w]
 
-;( xt -- )
-;(!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1)
-native "forth_dp", forth_dp
-	
-;( xt -- )
-;(!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1)
 native "branch", branch
+	mov pc, [pc]
+    jmp next
+
 	
-;( xt -- )
-;(!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1)
-native "0branch", 0branch
+native "branch0", branch0
+	pop rax
+    test rax, rax
+    jnz .skip
+    mov pc, [pc]
+    jmp next
+    .skip:
+    add pc, 8
+    jmp next
 	
 native "exit", exit
 	mov pc, [rstack]
@@ -220,14 +229,6 @@ native "lit", lit
 	add pc, 8	
 	jmp next
 
-;( xt -- )
-;(!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1)
-native "forth_sp", forth_sp
-	
-;( xt -- )
-;(!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1)
-native "forth_stack-base", forth_stack_base
-	
 ;( call_num a1 a2 a3 a4 a5 a6 -- new_rax new_rdx)
 native "syscall", syscall
 	pop r9
@@ -242,9 +243,18 @@ native "syscall", syscall
 	push rdx    
 	jmp next
 
-;( xt -- )
-;(!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1)
 native ".S", show_stack
+	mov rdx, rsp
+    .loop:
+    mov rdi, [rdx]
+    push rdx
+    call print_int
+    call print_newline
+    pop rdx
+    add rdx, 8
+    cmp rdx, [stack_start]
+    jl .loop
+    jmp next
 	
 
 native "bye", bye
@@ -259,8 +269,221 @@ native "docol", docol
 	mov pc, w
 	jmp next
 
-next: 
-	mov w, [pc]
-	add pc, 8
-	jmp [w]
+native 'execute', execute
+	pop rax
+	mov w, rax
+	jmp [rax]
+
+native "word", word
+	pop rdi
+	call read_word
+	push rdx
+	jmp next
+
+native "prints", prints
+	pop rdi
+	call print_string
+	jmp next
+
+native "printc", printc
+	pop rdx
+	pop rsi
+	mov rdi, 1
+	mov rax, 1
+	syscall
+	jmp next
+
+native "count", count
+	pop rdi
+	call string_length
+	push rax
+	jmp next
+	
+native "number", number
+	call read_word
+	mov rax, rdi
+	call parse_int
+	push rax
+	jmp next
+
+native "find", find
+	pop rdi               
+	call find_word
+	push rax
+	jmp next
+
+native "error", error
+	mov  rdi, unknown_word
+	call print_string
+	call print_newline
+	jmp next
+
+native "isInstant", isInstant
+	pop rax
+	push rax
+	xor rdx, rdx
+	mov dl, byte[rax - 1]
+	push rdx
+	jmp next
+
+native "parse_int", parse_int
+	pop rdi
+	call parse_int         
+	push rax              
+	push rdx
+	jmp next
+
+native "pushmode", pushmode
+	xor eax, eax
+	mov rax, [mode]
+	push rax
+	jmp next
+
+native "pushmode_address", pushmode_address
+	xor eax, eax
+	mov rax, mode
+	push rax
+	jmp next
+
+native ",", comma
+	mov rax, [here]
+	pop qword [rax]
+	add qword [here], 8
+	jmp next
+
+native "isbranch", isbranch
+	pop rax
+	push rax
+	cmp byte[rax - 1], 2
+	jne .continue
+	mov byte[was_branch], 1
+	.continue:
+	jmp next
+
+native "init", init
+	mov rstack, rstack_start
+	mov stack, stack_start
+	xor eax, eax
+	mov rax, [in_fd]
+	rpush rax
+	xor eax, eax
+	pop rax
+	mov [in_fd], rax
+	mov qword[mode], 0
+	mov pc, xt_run
+	cmp qword [stack_start], 0
+	je  .first
+	mov rsp, [stack_start]
+	jmp next
+	.first:
+	mov [stack_start], rsp
+	jmp next
+
+native "buffer", buffer
+	push qword input_buf
+	jmp next
+
+native "savenum", savenum
+	pop rax
+	mov [here], rax
+	xor eax, eax
+	mov rax, here
+	add rax, 8
+	mov qword[here], rax
+	jmp next
+
+native "push_lw", push_lastword
+	push last_word
+	jmp next
+
+native "unsetbranch", unsetbranch
+	mov byte[was_branch], 0
+	jmp next
+
+native "wasbranch", wasbranch
+	xor rdx, rdx
+	mov dl, byte[was_branch]
+	push rdx
+	jmp next
+
+native "create", create
+	mov rcx, [last_word]
+	mov rsi, [here]
+	mov [rsi], rcx
+	mov [last_word], rsi
+	add rsi, 8
+	pop rdi
+	push rsi
+	call string_copy
+	pop rsi
+	push rsi
+	mov rdi, rsi
+	call string_length
+	pop rsi
+	add rsi, rax
+	inc rsi              
+	pop rax
+	mov [rsi], al
+	inc rsi
+	mov [here], rsi
+	jmp next
+
+native "cfa", cfa
+	pop rsi
+    add rsi, 9
+    .loop:
+    mov al, [rsi]
+    test al, al
+    jz .end
+    inc rsi
+    jmp .loop
+    .end:
+    add rsi, 2
+    push rsi
+    jmp next
+
+
+colon ":", colon
+	.restart:
+	dq xt_buffer
+	dq xt_word
+	branch0 .restart
+	dq xt_lit, 0         
+	dq xt_buffer
+	dq xt_create
+	dq xt_lit, 1, xt_pushmode_address
+	dq xt_write_value
+	dq xt_lit, i_docol
+	dq xt_comma
+	dq xt_exit
+
+colon ";", semicolon, 1
+	dq xt_lit, 0, xt_pushmode_address
+	dq xt_write_value
+	dq xt_lit, xt_exit
+	dq xt_comma
+	dq xt_exit
+
+colon "'", tick, 1
+	dq xt_buffer
+	dq xt_word
+	dq xt_drop
+	dq xt_buffer
+	dq xt_find, xt_dup
+	branch0 .no_such_word
+	dq xt_cfa
+	dq xt_pushmode
+	branch0 .interpret
+	dq xt_lit, xt_lit
+	dq xt_comma
+	dq xt_comma
+	.interpret:
+	dq xt_exit
+	.no_such_word:
+	dq xt_error
+	dq xt_exit
+;-----------------------------------------
+
+
+
 
