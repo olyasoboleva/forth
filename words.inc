@@ -255,7 +255,11 @@ native ".S", show_stack
     cmp rdx, [stack_start]
     jl .loop
     jmp next
-	
+
+const dp, dp
+const here, [here]
+const in_fd, in_fd
+const state, state
 
 native "bye", bye
 	mov rax, 60
@@ -482,8 +486,3 @@ colon "'", tick, 1
 	.no_such_word:
 	dq xt_error
 	dq xt_exit
-;-----------------------------------------
-
-
-
-
